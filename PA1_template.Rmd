@@ -6,3 +6,128 @@ date: "Sunday, July 20, 2014"
 output: html_document
 ---
 
+In this document I will walk you through the process of preparing some analysis
+on the [Activity monitoring data](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2Factivity.zip)
+set provided.
+
+## Loading and preprocessing the data
+After downloading and unzipping the file we need to set R's working 
+directory to the correct location. You will need to modify the directory
+for your system as it will not match mine.
+```{r}
+setwd("D:/Users/cbort/Google Drive/Edu/Coursera/Reproducible Research/RepData_PeerAssessment1")
+```
+  
+Now that the directory is set we can read in the contents of the csv file.
+```{r}
+df <- read.csv("activity.csv", sep=",", stringsAsFactors=FALSE)
+```
+  
+Since the dates were imported as character strings we will need to change them 
+into dates.
+```{r}
+df[,2] <- as.Date(strptime(df[,2],"%Y-%m-%d"))
+```
+  
+## What is mean total number of steps taken per day?
+In order to find the mean total number of steps per day we can use the following 
+R code.
+```{r}
+per_day <- aggregate(steps~date, df, sum)
+```
+This will allow us to easily plot a histogram of steps per day.
+```{r}
+hist(per_day$steps, col="darkcyan", xlab="Steps Per Day", main="Histogram of Steps Per Day")
+```
+Additionally we are able to easily calculate the mean and median steps per day
+are calculated as follows:
+```{r}
+mean_steps<-mean(per_day$steps)
+median_steps<-median(per_day$steps)
+```
+
+## What is the average daily activity pattern?
+To calculate the daily activity pattern we will need to modify the data to group 
+by the interval and average the steps taken accross days. This can be done using
+the R code:
+```{r}
+per_interval <- aggregate(steps~interval, df, mean)
+```
+This can then be used to plot the average steps taken throughout the day
+```{r}
+plot(per_interval$interval, per_interval$steps, type='l',
+     col="darkcyan",
+     main="Average Daily Activity",
+     xlab="Daily Interval",
+     ylab="Steps")
+```
+...and to determine that the interval with the most steps taken:
+```{r}
+per_interval$interval[which.max(per_interval$steps)]
+
+```
+  
+## Imputing missing values
+This data set contains a number of rows with NA values. To clean up the dataset
+and determine the NA impact we can first calculate the number of rows with NA
+```{r}
+dim(df[!complete.cases(df),])[1]
+```
+
+We can then clean up the NAs by replacing them with the median time for that 
+interval. To do this we should first make sure only the steps column has NA 
+values
+```{r}
+sum(is.na(df$interval))
+sum(is.na(df$date))
+sum(is.na(df$steps))
+```
+This shows us that indeed only the "steps" field contains NA values.
+So we can now eliminate them by replacing NA with the median time for that 
+interval.
+```{r}
+cleaned_df <- df
+median_per_interval <- aggregate(steps~interval, df, median)
+for( i in 1:dim(df)[1]){
+    if (is.na(df$steps[i])){
+        interval <- cleaned_df[i,3]
+        steps <- median_per_interval[median_per_interval$interval==interval,2]
+        cleaned_df[i,1] <- steps[1]
+    }
+}
+```
+
+Now we will repeat our previous analysis to find:
+```{r}
+cleaned_per_day <- aggregate(steps~date, cleaned_df, sum)
+hist(cleaned_per_day$steps, col="darkcyan", xlab="Steps Per Day", main="Histogram of Steps Per Day(Clean)")
+clean_mean_steps <- mean(cleaned_per_day$steps)
+clean_median_steps <- median(cleaned_per_day$steps)
+```
+And we can then compare this to the previous values to see:
+```{r}
+(mean_steps - clean_mean_steps) / mean_steps * 100
+( median_steps - clean_median_steps) / median_steps * 100
+```
+and we can see this causese the mean to increase by ~10% and the median by 3.5%
+
+
+## Are there differences in activity patterns between weekdays and weekends?
+We will now add a column stating whether these are weekdays or weekends and plot it.
+```{r}
+cleaned_df$weekday <- ifelse(weekdays(cleaned_df$date) %in% c("Saturday","Sunday"),"weekend","weekday")
+weekend_per_interval <- aggregate(steps~interval+weekday, cleaned_df, mean)
+weekend <- weekend_per_interval[weekend_per_interval$weekday=="weekend",c(1,3)]
+weekday <- weekend_per_interval[weekend_per_interval$weekday=="weekday",c(1,3)]
+par(mfrow=c(2,1))
+plot(weekend$interval, weekend$steps, type='l',
+     col="darkcyan",
+     main="Weekend",
+     xlab="Daily Interval",
+     ylab="Steps")
+plot(weekday$interval, weekend$steps, type='l',
+     col="red",
+     main="Weekday",
+     xlab="Daily Interval",
+     ylab="Steps")
+```
